@@ -1,5 +1,5 @@
 # mame_xml_extractor
-build a mame xml using only the  source files
+
 extract and build a xml from source files, made for MAME 0.84 should work with previous versions<br>
 script should generate a xml with samples, sampleof, bios and driver status information<br>
 needs xidel and datutil in _bin\ folder, mamediff its optional to generate a report(changes from previous version) at the end<br>
