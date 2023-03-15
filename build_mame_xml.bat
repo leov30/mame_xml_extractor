@@ -9,7 +9,7 @@ rem //script uses the "sort /unique" command, may be only available in windows 1
 rem //https://www.videlibri.de/xidel.html
 rem //http://www.logiqx.com/Tools/
 
-title MAMEoXtras xml builder from source [Build:Mar-13-2023]
+title MAMEoXtras xml builder from source [Build:Mar-14-2023]
 setlocal enabledelayedexpansion
 
 set _error=0
@@ -426,6 +426,7 @@ _bin\xidel -s _temp\mame.xml -e "extract( $raw, '^<game name=\""invaders\"" sour
 _bin\xidel -s _temp\temp.1 -e "replace( $raw, '^\t?<sample name=\""[\w.]+\""/>\r\n|</game>', '', 'm')" >_temp\invaders.1
 (for /l %%g in (0,1,18) do echo ^<sample name="%%g.wav"/^>
 echo ^</game^>) >>_temp\invaders.1
+
 _bin\xidel -s _temp\mame.xml -e "replace( $raw, '^<game name=\""invaders\"" sourcefile=\""[\w.]+\"">.+?</game>', '', 'sm')" >_temp\temp.1
 del _temp\mame.xml & ren _temp\temp.1 mame.xml
 type _temp\invaders.1 >>_temp\mame.xml
@@ -456,6 +457,46 @@ _bin\datutil -f gamelist -o output\gamelist.txt "output\%_file%"
 _bin\datutil -f titles -o output\titles.txt "output\%_file%"
 del datutil.log
 
+rem // make romstatus.xml for mameoxtras using the created new xml
+rem // 4=outof memory, 2=runs slowly, 1=working, 3=crashes, 5=general nonworking, empty=unknown
+
+rem //option 1, use crahes for prelimnary status, and general nonworking for imperfect status games?
+rem //option 2, use crashes for emulation="preliminary", and general nonworking for protection,sound,graphics,color="preliminary", imperfect will be ignored. assume alltoer games 'good'
+
+cls&title Building romstatus.xml...
+rem //remove this becuase xidel breaks
+_bin\xidel -s "output\%_file%" -e "replace( $raw, '^<\WDOCTYPE mame \[.+?\]>', '', 'sm')" >_temp\datafile.1
+
+_bin\xidel -s _temp\datafile.1 -e "//game[driver]/driver[@emulation='preliminary']/../@name" >_temp\crashes.lst
+_bin\xidel -s _temp\datafile.1 -e "//game[driver]/driver[@color='preliminary' or @sound='preliminary' or @graphic='preliminary' or @protection='preliminary']/../@name" >_temp\nonworking.lst
+
+rem //cusotm list of games and drivers that run slowly in mameoxtras
+call :get_custom
+
+del _temp\slowly.lst 2>nul
+for /f %%g in (_temp\custom.lst) do (
+	for /f %%h in ('_bin\xidel -s _temp\datafile.1 -e "matches( $raw, 'sourcefile=\""%%g\""', 'q')"') do if %%h==true (
+		_bin\xidel -s _temp\datafile.1 -e "//game[@sourcefile='%%g']/@name" >>_temp\slowly.lst
+		
+	)else (
+		(echo %%g) >>_temp\slowly.lst
+	)
+)
+
+rem //get all games exept bios
+_bin\xidel -s _temp\datafile.1 -e "//game[not(@isbios)]/@name" >_temp\index.1
+
+(echo ^<^^!-- RomStatus XML / MAMEoXtras / %_file% --^>
+echo ^<Roms^>) >_temp\romstatus.xml
+for /f %%g in (_temp\index.1) do (
+	call :build_romstatus %%g
+
+)
+(echo ^</Roms^>) >>_temp\romstatus.xml
+
+move /y _temp\romstatus.xml output\
+
+cls
 rem // compare the old datafile with the new datafile
 if "%_datafile%"=="" pause&exit
 if not exist _bin\mamediff.exe pause&exit
@@ -468,6 +509,41 @@ del mamediff.dat
 
 pause&exit
 rem // ***************************** END OF SCRIPT ******************************************* 
+
+:build_romstatus
+rem //order matter since there may be double entires
+
+>nul 2>&1 findstr /x "%1" _temp\crashes.lst && (
+	echo %1 ---^> Crashes
+	(echo 	^<Rom name="%1" version="1.0"^>
+	echo 		^<Status^>Crashes^</Status^>
+	echo 		^<StatusNumber^>3^</StatusNumber^>
+	echo 	^</Rom^>) >>_temp\romstatus.xml
+	exit /b
+)
+>nul 2>&1 findstr /x "%1" _temp\nonworking.lst && (
+	echo %1 ---^> General nonWorking
+	(echo 	^<Rom name="%1" version="1.0"^>
+	echo 		^<Status^>General nonworking^</Status^>
+	echo 		^<StatusNumber^>5^</StatusNumber^>
+	echo 	^</Rom^>) >>_temp\romstatus.xml
+	exit /b
+)
+>nul 2>&1 findstr /x "%1" _temp\slowly.lst && (
+	echo %1 ---^> Runs Slowly
+	(echo 	^<Rom name="%1" version="1.0"^>
+	echo 		^<Status^>Runs slowly^</Status^>
+	echo 		^<StatusNumber^>2^</StatusNumber^>
+	echo 	^</Rom^>) >>_temp\romstatus.xml
+	exit /b
+)
+
+(echo 	^<Rom name="%1" version="1.0"^>
+echo 		^<Status^>Working^</Status^>
+echo 		^<StatusNumber^>1^</StatusNumber^>
+echo 	^</Rom^>) >>_temp\romstatus.xml
+
+exit /b
 
 :replace_array
 _bin\xidel -s _temp\samples.xml -e "extract( $raw, '^\t?<%4 name=\""%2\""/?>(.+?)</game>', 1, 'ms')" >_temp\temp.1
@@ -632,6 +708,29 @@ for /f %%g in ('_bin\xidel -s _temp\samples.equ -e "matches( $raw, '\t%_name%_\w
 )
 
 exit /b
+
+:get_custom
+rem //unplayable slow games for romstatus.xml
+
+(echo namcos22.c
+echo namcos11.c
+echo namcos12.c
+echo zn.c
+echo stv.c
+echo midxunit.c
+echo midvunit.c
+echo harddriv.c
+echo vamphalf.c
+echo atarigt.c
+echo gaelco3d.c
+echo rabbit.c
+echo drivedge
+echo mmaulers
+echo gaiapols) >_temp\custom.lst
+
+exit /b
+
+
 
 REM GAMEX(YEAR,NAME,PARENT,MACHINE,[INPUT,INIT,MONITOR],COMPANY,FULLNAME,FLAGS)
 REM GAME(YEAR,NAME,PARENT,MACHINE,[INPUT,INIT,MONITOR],COMPANY,FULLNAME)
