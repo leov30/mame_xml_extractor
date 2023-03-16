@@ -9,7 +9,7 @@ rem //script uses the "sort /unique" command, may be only available in windows 1
 rem //https://www.videlibri.de/xidel.html
 rem //http://www.logiqx.com/Tools/
 
-title MAMEoXtras xml builder from source [Build:Mar-14-2023]
+title MAMEoXtras xml builder [Build: Mar-15-2023]
 setlocal enabledelayedexpansion
 
 set _error=0
@@ -447,7 +447,7 @@ rem // output
 md output 2>nul
 
 for /f "tokens=%date:~4,2%" %%g in ("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec") do set _month=%%g
-set "_file=MAME_[%_month%-%date:~7,2%-%date:~10,4%].xml"
+set "_file=MAMEoXtras_[%_month%-%date:~7,2%-%date:~10,4%].xml"
 
 rem // sort roms, keep as much information, verbose loging, convert to lower case 
 _bin\datutil -s -k -v -l -f listxml -o "output\%_file%" _temp\mame.xml
@@ -483,8 +483,8 @@ for /f %%g in (_temp\custom.lst) do (
 	)
 )
 
-rem //get all games exept bios
-_bin\xidel -s _temp\datafile.1 -e "//game[not(@isbios)]/@name" >_temp\index.1
+rem //get all games that have roms exept bios
+_bin\xidel -s _temp\datafile.1 -e "//game[not(@isbios) and rom]/@name" >_temp\index.1
 
 (echo ^<^^!-- RomStatus XML / MAMEoXtras / %_file% --^>
 echo ^<Roms^>) >_temp\romstatus.xml
@@ -495,6 +495,44 @@ for /f %%g in (_temp\index.1) do (
 (echo ^</Roms^>) >>_temp\romstatus.xml
 
 move /y _temp\romstatus.xml output\
+
+rem //rebuild catver.ini and add new games, if sources\catver.ini its found
+if exist sources\catver.ini (
+	cls&title Building catver.ini...
+	
+	(echo ;;  catver.ini / %_file% / MAMEoXTras ;;
+	echo:
+	echo [Category]) >_temp\catver.ini
+	
+	_bin\xidel -s --input-format=html sources\catver.ini -e "extract( $raw, '^\w+=[A-Za-z].+', '0', 'm*')" >_temp\catver.1
+	
+	_bin\xidel -s _temp\datafile.1 -e "//game[@cloneof]/(@name|@cloneof)" >_temp\temp.1
+	_bin\xidel -s _temp\temp.1 -e "replace( $raw, '^(\w+)\r\n(\w+)', '$1	$2', 'm')" >_temp\cloneof.1
+	_bin\xidel -s _temp\datafile.1 -e "//game[not(@cloneof) and not(@isbios) and rom]/@name" >>_temp\cloneof.1
+
+	sort _temp\cloneof.1 /o _temp\cloneof.1
+	
+	rem //all games that have roms exept bios
+	for /f "tokens=1,2" %%g in (_temp\cloneof.1) do (
+		
+		>nul 2>&1 findstr /b "%%g=" _temp\catver.1
+		if !errorlevel!==0 (
+			echo %%g
+			findstr /b "%%g=" _temp\catver.1 >>_temp\catver.ini
+		)else (
+			call :build_catver %%g %%h
+		)
+	)
+)
+move /y _temp\catver.ini output\
+
+set /a "_time=%time:~0,2%*3600+%time:~3,1%*600+%time:~4,1%*60+%time:~6,1%*10+%time:~7,1%"
+set /a "_time=%_time%-%_time0%"
+set /a "_hour=%_time%/(3600)"
+set /a "_min=%_time%/60"
+set /a "_sec=%_time%%%60"
+
+cls&title ALL Done, Total Time: %_hour%:%_min%:%_sec%
 
 cls
 rem // compare the old datafile with the new datafile
@@ -509,6 +547,35 @@ del mamediff.dat
 
 pause&exit
 rem // ***************************** END OF SCRIPT ******************************************* 
+
+:build_catver
+
+rem //its a parent, look if any of the clones has a entry
+if "%2"=="" (
+	for /f %%g in ('findstr /e "	%1" _temp\cloneof.1') do (
+		>nul 2>&1 findstr /b "%%g=" _temp\catver.1 && (
+			echo 	%%g
+			for /f "tokens=2 delims==" %%h in ('findstr /b "%%g=" _temp\catver.1') do (echo %1=%%h) >>_temp\catver.ini
+			exit /b
+		)
+	)
+	(echo %1=Uncategorized) >>_temp\catver.ini
+	exit /b
+)
+
+rem //its a clone, look if the parent have a entry
+>nul 2>&1 findstr /b "%2=" _temp\catver.1 && (
+	echo %2
+	for /f "tokens=2 delims==" %%g in ('findstr /b "%2=" _temp\catver.1') do (echo %1=%%g) >>_temp\catver.ini
+	exit /b
+)
+
+echo %%g ---^> Uncategorized
+rem //nothing found
+(echo %1=Uncategorized) >>_temp\catver.ini
+
+exit /b
+
 
 :build_romstatus
 rem //order matter since there may be double entires
