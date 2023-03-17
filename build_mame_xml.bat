@@ -9,7 +9,7 @@ rem //script uses the "sort /unique" command, may be only available in windows 1
 rem //https://www.videlibri.de/xidel.html
 rem //http://www.logiqx.com/Tools/
 
-title MAMEoXtras xml builder [Build: Mar-15-2023]
+title MAMEoXtras xml builder [Build: Mar-16-2023]
 setlocal enabledelayedexpansion
 
 set _error=0
@@ -463,6 +463,7 @@ rem // 4=outof memory, 2=runs slowly, 1=working, 3=crashes, 5=general nonworking
 rem //option 1, use crahes for prelimnary status, and general nonworking for imperfect status games?
 rem //option 2, use crashes for emulation="preliminary", and general nonworking for protection,sound,graphics,color="preliminary", imperfect will be ignored. assume alltoer games 'good'
 
+
 cls&title Building romstatus.xml...
 rem //remove this becuase xidel breaks
 _bin\xidel -s "output\%_file%" -e "replace( $raw, '^<\WDOCTYPE mame \[.+?\]>', '', 'sm')" >_temp\datafile.1
@@ -482,6 +483,9 @@ for /f %%g in (_temp\custom.lst) do (
 		(echo %%g) >>_temp\slowly.lst
 	)
 )
+
+rem //adding games that required chd to slowly.lst
+_bin\xidel -s _temp\datafile.1 -e "//game[disk]/@name" >>_temp\slowly.lst
 
 rem //get all games that have roms exept bios
 _bin\xidel -s _temp\datafile.1 -e "//game[not(@isbios) and rom]/@name" >_temp\index.1
@@ -526,6 +530,49 @@ if exist sources\catver.ini (
 )
 move /y _temp\catver.ini output\
 
+cls&title Making suplemental batch scripts...
+rem //make individual batch script for easy rom organization
+
+rem //clones, bios, parents
+_bin\xidel -s _temp\datafile.1 -e "//game[@isbios]/@name" >_temp\bios.lst
+_bin\xidel -s _temp\datafile.1 -e "//game[@cloneof]/@name" >_temp\clones.lst
+_bin\xidel -s _temp\datafile.1 -e "//game[not(@cloneof) and not(@isbios) and rom]/@name" >_temp\parents.lst
+
+rem //overall status
+REM _bin\xidel -s _temp\datafile.1 -e "//game[driver]/driver[@status='preliminary']" >_temp\preliminary.lst
+REM _bin\xidel -s _temp\datafile.1 -e "//game[driver]/driver[@status='good']" >_temp\good.lst
+
+rem //status from romstatus.xml
+_bin\xidel -s output\romstatus.xml -e "//rom[Status='Runs slowly']/@name" >_temp\slowly.lst
+_bin\xidel -s output\romstatus.xml -e "//rom[Status='Crashes']/@name" >_temp\crashes.lst
+_bin\xidel -s output\romstatus.xml -e "//rom[Status='General nonworking']/@name" >_temp\nonworking.lst
+_bin\xidel -s output\romstatus.xml -e "//rom[Status='Working']/@name" >_temp\working.lst
+
+del _temp\bios-cones-parents.bat
+for %%g in (bios.lst clones.lst parents.lst) do call :build_batch %%g bios-cones-parents
+
+rem //list order matters, will be adding good clones if parent its not working
+del _temp\crashes-slowly-nonworking.bat
+for %%g in (crashes.lst slowly.lst nonworking.lst) do call :build_batch %%g crashes-slowly-nonworking 1
+
+call :build_batch working.lst crashes-slowly-nonworking
+
+if exist output\catver.ini (
+	_bin\xidel -s --input-format=html output\catver.ini -e "extract( $raw, '^(\w+)=.*?Mature', 1, 'm*')" >_temp\mature.lst
+	_bin\xidel -s --input-format=html output\catver.ini -e "extract( $raw, '^(\w+)=.*?Mahjong', 1, 'm*')" >_temp\mahjong.lst
+	_bin\xidel -s --input-format=html output\catver.ini -e "extract( $raw, '^(\w+)=.*?Quiz', 1, 'm*')" >_temp\quiz.lst
+	
+	call :build_batch mature.lst MATURE 1
+	
+	for %%g in (mahjong.lst quiz.lst) do call :build_batch %%g mahjong-quiz 1
+) 
+
+md output\_batch 2>nul
+for %%g in (_temp\*.bat) do (
+	move /y %%g .\output\_batch\
+
+)
+
 set /a "_time=%time:~0,2%*3600+%time:~3,1%*600+%time:~4,1%*60+%time:~6,1%*10+%time:~7,1%"
 set /a "_time=%_time%-%_time0%"
 set /a "_hour=%_time%/(3600)"
@@ -548,11 +595,40 @@ del mamediff.dat
 pause&exit
 rem // ***************************** END OF SCRIPT ******************************************* 
 
+
+:build_batch
+rem //add all clones if the parent is in the list
+if "%3"=="1" (
+	for /f %%g in (_temp\%1) do (
+		for /f %%h in ('findstr /e /c:"	%%g" _temp\cloneof.1') do (echo %%h) >>_temp\%1
+	)
+	sort /unique _temp\%1 /o _temp\%1
+)
+
+if not exist _temp\%2.bat (
+	echo @echo off
+	echo title "%_file%" ^^^| Build: %date%
+	echo echo.=====================================================
+	echo echo. This script will MOVE matched .zip files   
+	echo echo.=====================================================
+	echo choice /m "Continue?"
+	echo if %%errorlevel%% equ 2 exit
+	echo cls^&echo. Creating folders and moving files...
+	
+) >_temp\%2.bat
+
+rem //order matters since there will be duplicates 
+(echo md %~n1) >>_temp\%2.bat
+_bin\xidel -s _temp\%1 -e "replace( $raw, '^(\w+)', '>nul 2>&1 move /y $1.zip .\\%~n1\\', 'm')" >>_temp\%2.bat
+
+
+exit /b
+
 :build_catver
 
 rem //its a parent, look if any of the clones has a entry
 if "%2"=="" (
-	for /f %%g in ('findstr /e "	%1" _temp\cloneof.1') do (
+	for /f %%g in ('findstr /e /c:"	%1" _temp\cloneof.1') do (
 		>nul 2>&1 findstr /b "%%g=" _temp\catver.1 && (
 			echo 	%%g
 			for /f "tokens=2 delims==" %%h in ('findstr /b "%%g=" _temp\catver.1') do (echo %1=%%h) >>_temp\catver.ini
@@ -570,8 +646,17 @@ rem //its a clone, look if the parent have a entry
 	exit /b
 )
 
-echo %%g ---^> Uncategorized
-rem //nothing found
+
+rem //nothing found, maybe it will find from another catver.ini
+REM if exist sources\catver2.ini (
+	REM for /f "delims=" %%g in ('findstr /rb /c:"%1=[A-Z].*" sources\catver2.ini') do (
+		REM echo %%g
+		REM (echo %%g) >>_temp\catver.ini
+		REM exit /b
+	REM )
+REM )
+
+echo %1 ---^> Uncategorized
 (echo %1=Uncategorized) >>_temp\catver.ini
 
 exit /b
@@ -794,6 +879,58 @@ echo rabbit.c
 echo drivedge
 echo mmaulers
 echo gaiapols) >_temp\custom.lst
+
+
+REM *crystal.c
+REM namcos22.c
+REM *namcos21.c
+REM namcos11.c
+REM namcos12.c
+REM zn.c
+REM stv.c
+REM *groundfx.c
+REM *midwunit.c
+REM midxunit.c
+REM midvunit.c
+REM harddriv.c
+REM *superchs.c
+REM vamphalf.c
+REM atarigt.c
+REM *fuukifg3.c
+REM gaelco3d.c
+REM rabbit.c
+REM **undrfire.c
+REM **psikyosh.c
+REM **itech32.c
+REM **namconb1.c
+REM **multi32.c
+REM **ms32.c
+REM **model1.c
+REM **midtunit.c
+REM **megasys1.c
+REM **deco32.c
+REM **segaxbd.c
+REM **segaybd.c
+REM **system32.c
+REM **taito_f3.c
+REM **atarig42.c
+REM **atarigx2.c
+REM **deco_mic.c
+REM **konamigx.c
+REM **namcos2.c
+REM **pgm.c
+REM *wcbowl
+REM *sftm
+REM *shufshot
+REM drivedge
+REM *daraku
+REM *machbrkr
+REM *cbombers
+REM mmaulers
+REM gaiapols
+REM *outfxies
+REM *commandw
+
 
 exit /b
 
