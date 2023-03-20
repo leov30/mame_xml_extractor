@@ -434,14 +434,6 @@ type _temp\invaders.1 >>_temp\mame.xml
 rem //close datafile
 (echo ^</datafile^>) >>_temp\mame.xml
 
-set /a "_time=%time:~0,2%*3600+%time:~3,1%*600+%time:~4,1%*60+%time:~6,1%*10+%time:~7,1%"
-set /a "_time=%_time%-%_time0%"
-set /a "_hour=%_time%/(3600)"
-set /a "_min=%_time%/60"
-set /a "_sec=%_time%%%60"
-
-
-cls&title ALL Done, Total Time: %_hour%:%_min%:%_sec%
 
 rem // output
 md output 2>nul
@@ -548,8 +540,8 @@ _bin\xidel -s output\romstatus.xml -e "//rom[Status='Crashes']/@name" >_temp\cra
 _bin\xidel -s output\romstatus.xml -e "//rom[Status='General nonworking']/@name" >_temp\nonworking.lst
 _bin\xidel -s output\romstatus.xml -e "//rom[Status='Working']/@name" >_temp\working.lst
 
-del _temp\bios-cones-parents.bat
-for %%g in (bios.lst clones.lst parents.lst) do call :build_batch %%g bios-cones-parents
+del _temp\bios-clones-parents.bat
+for %%g in (bios.lst clones.lst parents.lst) do call :build_batch %%g bios-clones-parents
 
 rem //list order matters, will be adding good clones if parent its not working
 del _temp\crashes-slowly-nonworking.bat
