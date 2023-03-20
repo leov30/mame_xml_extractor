@@ -393,10 +393,17 @@ for /f %%g in ('_bin\xidel -s _temp\samples.equ -e "extract( $raw, '\t(\w+)$', 1
 	del _temp\mame.xml & ren _temp\temp.1 mame.xml
 )
 
+rem //correct romof bios for clones, and romof bios for bios
+_bin\xidel -s _temp\mame.xml -e "replace( $raw, 'cloneof=\""(\w+)\"" romof=\""\w+\""', 'cloneof=\""$1\"" romof=\""$1\""')" >_temp\temp.1
+_bin\xidel -s _temp\temp.1 -e "replace( $raw, '^(<game isbios=\""yes\"" name=\""\w+\"" sourcefile=\""[\w.]+\"") romof=\""\w+\"">', '$1>', 'm')" >_temp\mame.xml
+
+rem //xevious samples cannot be completed in romcenter since battles coloneof xevious its set to use its own samples, game dosent boot anyway
+_bin\xidel -s _temp\mame.xml -e "replace( $raw, 'romof=\""xevious\"">$', 'romof=\""xevious\"" sampleof=\""xevious\"">', 'm')" >_temp\temp.1
+del _temp\mame.xml & ren _temp\temp.1 mame.xml
+
 rem //cleanup empty lines
 _bin\xidel -s _temp\mame.xml -e "replace( $raw, '^\s+$', '', 'm')" >_temp\temp.1
 del _temp\mame.xml & ren _temp\temp.1 mame.xml
-
 
 rem //look for sampleof with no game, and add a ghost game so datutil will keep sampleof
 _bin\xidel -s _temp\mame.xml -e "extract( $raw, 'sampleof=\""(\w+)\""', 1, '*')" >_temp\index.1
