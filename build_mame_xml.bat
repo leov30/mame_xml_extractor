@@ -9,7 +9,7 @@ rem //script uses the "sort /unique" command, may be only available in windows 1
 rem //https://www.videlibri.de/xidel.html
 rem //http://www.logiqx.com/Tools/
 
-title MAMEoXtras xml builder [Build: Mar-16-2023]
+title MAMEoXtras xml builder [Build: Mar-26-2023]
 setlocal enabledelayedexpansion
 
 set _error=0
@@ -43,15 +43,19 @@ echo *************************************************************
 echo:
 timeout 10 & cls
 
-set /a "_time0=%time:~0,2%*3600+%time:~3,1%*600+%time:~4,1%*60+%time:~6,1%*10+%time:~7,1%"
 if not exist _temp (md _temp)else (del /q /s _temp >nul)
 
-rem // drivers with duplicated games in MAMEoXtras
-if exist sources\src\drivers\digdug.c (
-	if exist sources\src\drivers\galaga.c (
-		for %%g in (digdug.c bosco.c xevious.c locomotn.c afega.c) do ren sources\src\drivers\%%g %%~ng.bak 
-	)
+rem // drivers with duplicated games in MAMEoXtras, not in 0.72*
+for /f %%g in ('_bin\xidel -s sources\src\drivers\galaga.c -e "matches( $raw, 'GAME\( 1982, digdug')"') do if %%g==true (
+	for %%h in (digdug.c bosco.c xevious.c locomotn.c afega.c) do ren sources\src\drivers\%%h %%~nh.bak 
+
 )
+
+REM if exist sources\src\drivers\digdug.c (
+	REM if exist sources\src\drivers\galaga.c (
+		REM for %%g in (digdug.c bosco.c xevious.c locomotn.c afega.c) do ren sources\src\drivers\%%g %%~ng.bak 
+	REM )
+REM )
 
 cls&title Building drivers.c ...
 for %%g in (sources\src\drivers\*.c,sources\src\sndhrdw\*.c,sources\src\vidhrdw\*.c,sources\src\drivers\*.h,sources\src\sndhrdw\*.h,sources\src\vidhrdw\*.h) do (
@@ -313,10 +317,12 @@ for /f "tokens=1,2,3" %%g in (_temp\samples.equ) do (
 rem // ***************** END OF SAMPLES **********************************************
 
 cls&title transforming mame.c to xml...
-rem //convert to xml
-_bin\xidel -s _temp\mame.c -e "replace( $raw, '^[\t ]*DISK_IMAGE(?:_READONLY)?\( \"(\w+)\",[\d ]+, BAD_DUMP MD5\((\w+)\) SHA1\((\w+)\).+', '<disk name=\""$1\"" size=\""\"" sha1=\""$3\"" md5=\""$2\"" status=\""baddump\""/>', 'm')" >_temp\temp.1
-_bin\xidel -s _temp\temp.1 -e "replace( $raw, '^[\t ]*DISK_IMAGE(?:_READONLY)?\( \"(\w+)\",[\d ]+, NO_DUMP(?: MD5\((\w+)\) SHA1\((\w+)\))?.+', '<disk name=\""$1\"" size=\""\"" sha1=\""$3\"" md5=\""$2\"" status=\""nodump\""/>', 'm')" >_temp\temp.2
-_bin\xidel -s _temp\temp.2 -e "replace( $raw, '^[\t ]*DISK_IMAGE(?:_READONLY)?\( \"(\w+)\",[\d ]+, MD5\((\w+)\) SHA1\((\w+)\).+', '<disk name=\""$1\"" size=\""\"" sha1=\""$3\"" md5=\""$2\""/>', 'm')" >_temp\temp.1
+rem //convert to xml, mameox 0.72* only have md5
+_bin\xidel -s _temp\mame.c -e "replace( $raw, '^[\t ]*DISK_IMAGE(?:_READONLY)?\([\t ]*\""([\w.]+)\"",[\d ]+, BAD_DUMP MD5\((\w+)\)(?: SHA1\((\w+)\))?.+', '<disk name=\""$1\"" size=\""\"" sha1=\""$3\"" md5=\""$2\"" status=\""baddump\""/>', 'm')" >_temp\temp.1
+_bin\xidel -s _temp\temp.1 -e "replace( $raw, '^[\t ]*DISK_IMAGE(?:_READONLY)?\([\t ]*\""([\w.]+)\"",[\d ]+, NO_DUMP(?: MD5\((\w+)\))?(?: SHA1\((\w+)\))?.+', '<disk name=\""$1\"" size=\""\"" sha1=\""$3\"" md5=\""$2\"" status=\""nodump\""/>', 'm')" >_temp\temp.2
+_bin\xidel -s _temp\temp.2 -e "replace( $raw, '^[\t ]*DISK_IMAGE(?:_READONLY)?\([\t ]*\""([\w.]+)\"",[\d ]+, MD5\((\w+)\)(?: SHA1\((\w+)\))?.+', '<disk name=\""$1\"" size=\""\"" sha1=\""$3\"" md5=\""$2\""/>', 'm')" >_temp\temp.1
+
+
 
 _bin\xidel -s _temp\temp.1 -e  "replace( $raw, '^[\t ]*[A-Zx\d_]+[\t ]*\([\d\t, ]*\""([\w\s&#=.-]+)\""[\t ]*(?:,[\w\s*+]+|,[\w\s*+]+,[\t ]*([\w+*]+)[\t ]*)?,[\t ]*NO_DUMP[\t ]*CRC\((\w{8})\)[\t ]*(?:SHA1\((\w{40})\))?.+', '<rom name=\""$1\"" size=\""$2\"" crc=\""$3\"" sha1=\""$4\"" status=\""nodump\""/>', 'm')" >_temp\temp.2
 _bin\xidel -s _temp\temp.2 -e  "replace( $raw, '^[\t ]*[A-Zx\d_]+[\t ]*\([\d\t, ]*\""([\w\s&#=.-]+)\""[\t ]*(?:,[\w\s*+]+|,[\w\s*+]+,[\t ]*([\w+*]+)[\t ]*)?,[\t ]*NO_DUMP.+', '<rom name=\""$1\"" size=\""$2\"" crc=\""\"" sha1=\""\"" status=\""nodump\""/>', 'm')" >_temp\temp.1
@@ -572,13 +578,8 @@ for %%g in (_temp\*.bat) do (
 
 )
 
-set /a "_time=%time:~0,2%*3600+%time:~3,1%*600+%time:~4,1%*60+%time:~6,1%*10+%time:~7,1%"
-set /a "_time=%_time%-%_time0%"
-set /a "_hour=%_time%/(3600)"
-set /a "_min=%_time%/60"
-set /a "_sec=%_time%%%60"
 
-cls&title ALL Done, Total Time: %_hour%:%_min%:%_sec%
+cls&title ALL Done
 
 cls
 rem // compare the old datafile with the new datafile
@@ -757,8 +758,8 @@ del _temp\mame.xml & ren _temp\temp.1 mame.xml
 for /f %%g in ('_bin\xidel -s _temp\mame.xml -e "matches( $raw, '<cont size=\""[\w*+]+\""/>\s+<cont size=\""[\w*+]+\""/>')"') do if %%g==true goto :add_size
 
 rem //add rom continue to rom size
-_bin\xidel -s _temp\mame.xml -e "replace( $raw, '<rom name=\""([\w\s&#=.-]+)\"" size=\""([\w*+]+)\"" crc=\""(\w*)\"" sha1=\""(\w*)\"" status=\""(nodump|baddump)\""/>\s+<cont size=\""([\w*+]+)\""/>', '<rom name=\""$1\"" size=\""$2+$6\"" crc=\""$3\"" sha1=\""$4\"" status=\""$5\""/>', 'm')" >_temp\temp.1
-_bin\xidel -s _temp\temp.1 -e "replace( $raw, '<rom name=\""([\w\s&#=.-]+)\"" size=\""([\w*+]+)\"" crc=\""(\w*)\"" sha1=\""(\w*)\""/>\s+<cont size=\""([\w*+]+)\""/>', '<rom name=\""$1\"" size=\""$2+$5\"" crc=\""$3\"" sha1=\""$4\""/>', 'm')" >_temp\mame.xml
+_bin\xidel -s _temp\mame.xml -e "replace( $raw, '<rom name=\""(.+?)\"" size=\""([\w*+]+)\"" crc=\""(\w*)\"" sha1=\""(\w*)\"" status=\""(nodump|baddump)\""/>\s+<cont size=\""([\w*+]+)\""/>', '<rom name=\""$1\"" size=\""$2+$6\"" crc=\""$3\"" sha1=\""$4\"" status=\""$5\""/>')" >_temp\temp.1
+_bin\xidel -s _temp\temp.1 -e "replace( $raw, '<rom name=\""(.+?)\"" size=\""([\w*+]+)\"" crc=\""(\w*)\"" sha1=\""(\w*)\""/>\s+<cont size=\""([\w*+]+)\""/>', '<rom name=\""$1\"" size=\""$2+$5\"" crc=\""$3\"" sha1=\""$4\""/>', 'm')" >_temp\mame.xml
 
 rem // convert hex to dec, multiplications, additions
 _bin\xidel -s _temp\mame.xml -e "extract( $raw, 'size=\""([\w+*]+)\""', 1, '*')" >_temp\temp.1
