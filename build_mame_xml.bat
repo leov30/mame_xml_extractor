@@ -38,7 +38,7 @@ echo:
 echo *************************************************************
 echo * Make sure to remove uni characters from MAME src files    *
 echo * uning Notepad++ and the regex expression "[^\x00-\x7F]+"  *
-echo *                                                           *
+echo * settings^>Prefernces^>New Document^>Encoding^>ANSI        *
 echo *************************************************************
 echo:
 timeout 10 & cls
